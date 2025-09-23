@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Store</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f5f5f5; margin:0; padding:0; }
+        header { background: #4CAF50; color: white; padding: 20px; text-align:center; }
+        a { text-decoration: none; color: #4CAF50; margin: 0 10px; }
+        a.button { background: #4CAF50; color: white; padding: 5px 10px; border-radius: 5px; }
+        a.button:hover { background: #45a049; }
+        ul { list-style: none; padding:0; max-width: 800px; margin: 20px auto; }
+        li { background: white; margin: 10px 0; padding: 15px; border-radius: 8px; box-shadow: 0px 2px 5px #ccc; display:flex; justify-content: space-between; align-items: center; }
+        button { background: #4CAF50; color: white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer; }
+        button:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>My Online Store</h1>
+    <a href="/add" class="button">Add Product (Admin)</a>
+    <a href="/cart" class="button">View Cart</a>
+</header>
+
+<ul>
+    {% for product in products %}
+        <li>
+            <div>
+                <strong>{{ product.name }}</strong> - ${{ product.price }} - Stock: {{ product.stock }}
+            </div>
+            <form action="/add-to-cart/{{ product.id }}" method="post">
+                <button type="submit">Add to Cart</button>
+            </form>
+        </li>
+    {% else %}
+        <li>No products available.</li>
+    {% endfor %}
+</ul>
+</body>
+</html>
