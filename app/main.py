@@ -53,4 +53,4 @@ def add_to_cart(request: Request, product_id: int):
 @app.get("/cart", response_class=HTMLResponse)
 def view_cart(request: Request):
     total = sum(p.price for p in cart)
-    return templates.TemplateResponse("cart.html", {"request": request, "cart": cart, "total": total})
+    return templates.TemplateResponse("cart.html", {"request": request, "cart": cart, "total": total}) 
