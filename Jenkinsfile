@@ -1,9 +1,11 @@
 pipeline {
     agent any
-    environment{
-        ENV="dev"
+    environment {
+        ENV = "dev"
     }
-    stage("build") {
+
+    stages {  
+        stage("build") {
             steps { 
                 sh """
                 rm -rf venv
@@ -35,7 +37,8 @@ pipeline {
 
         stage("deploy") {
             steps {
-                sh "venv/bin/python app/main.py  | tee output.log"
+                sh "venv/bin/python app/main.py | tee output.log"
             }
         }
-    } 
+    }
+}
