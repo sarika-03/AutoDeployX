@@ -18,12 +18,12 @@ cart: List[Product] = []
 # Store front
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request, "products": products})
+    return templates.TemplateResponse(request, "index.html", {"products": products})
 
 # Admin - add product page
 @app.get("/add", response_class=HTMLResponse)
 def add_product_page(request: Request):
-    return templates.TemplateResponse("add_product.html", {"request": request})
+    return templates.TemplateResponse(request, "add_product.html")
 
 # Admin - handle add product form
 @app.post("/add", response_class=HTMLResponse)
@@ -37,7 +37,7 @@ def add_product_form(
 ):
     product = Product(id=id, name=name, sku=sku, price=price, stock=stock)
     products.append(product)
-    return templates.TemplateResponse("index.html", {"request": request, "products": products})
+    return templates.TemplateResponse(request, "index.html", {"products": products})
 
 # Add product to cart
 @app.post("/add-to-cart/{product_id}", response_class=HTMLResponse)
@@ -47,10 +47,10 @@ def add_to_cart(request: Request, product_id: int):
             cart.append(product)
             break
     total = sum(p.price for p in cart)
-    return templates.TemplateResponse("cart.html", {"request": request, "cart": cart, "total": total})
+    return templates.TemplateResponse(request, "cart.html", {"cart": cart, "total": total})
 
 # View cart
 @app.get("/cart", response_class=HTMLResponse)
 def view_cart(request: Request):
     total = sum(p.price for p in cart)
-    return templates.TemplateResponse("cart.html", {"request": request, "cart": cart, "total": total}) 
+    return templates.TemplateResponse(request, "cart.html", {"cart": cart, "total": total})
