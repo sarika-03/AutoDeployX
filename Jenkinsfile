@@ -37,7 +37,7 @@ pipeline {
 
         stage("deploy") {
             steps {
-                sh "venv/bin/python app/main.py | tee output.log"
+                sh "venv/bin/python -m app.main > output.log 2>&1 &"
             }
         }
     }
