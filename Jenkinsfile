@@ -1,12 +1,11 @@
 pipeline {
-    agent any
-    environment {
-        DOCKERHUB_CREDENTIALS = credentials('docker_jenkins')
+        agent any
+        environment {
         ENV = "dev"
-    }
+        }
 
     stages {  
-        stage("build") {
+        stage("Build Virtual Environment") {
             steps { 
                 sh """
                 rm -rf venv
@@ -16,23 +15,23 @@ pipeline {
             }
         }
 
-
-        
-        stage("docker build") {
+        stage("Docker Build Image") {
             steps {
-                sh " docker build -t deploy:3.12-slim . "
+                sh "docker build -t deploy:3.12-slim ."
             }
         }
 
-
-         stage('Login to Docker') {
+        stage('Login to Docker Hub') {
             steps {
-                sh " echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin "
+                withCredentials([
+                    usernamePassword(credentialsId: 'docker_jenkins', usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PSW')
+                ]) {
+                    sh "echo \$DOCKER_PSW | docker login -u \$DOCKER_USR --password-stdin"
                 }
             }
         }
 
-        stage("run test") {
+        stage("Run Tests") {
             steps {
                 sh """
                 venv/bin/python -m pip install httpx
@@ -45,19 +44,25 @@ pipeline {
                 }
             }
         }
-        stage("push image to docker hub") {
+
+        stage("Push Image to Docker Hub") {
             steps {
-                sh """
-                docker tag deploy:3.12-slim sarika/deployment:3.12-slim 
-                docker push sarika/deployment:3.12-slim
-                """
+                withCredentials([
+                    usernamePassword(credentialsId: 'docker_jenkins', usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PSW')
+                ]) {
+                    sh """
+                    # Tag the image with the Docker Hub username and push
+                    docker tag deploy:3.12-slim \$DOCKER_USR/deployment:3.12-slim
+                    docker push \$DOCKER_USR/deployment:3.12-slim
+                    """
+                }
             }
         }
 
-        stage("deploy") {
+        stage("Deploy") {
             steps {
                 sh "venv/bin/python -m app.main > output.log 2>&1 &"
             }
         }
     }
-
+}
