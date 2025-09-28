@@ -45,7 +45,10 @@ pipeline {
 
         stage("Push Image to Docker Hub") {
             steps {
-                sh " docker tag deploy:3.12-slim sarika1731/deployment:3.12-slim "
+                sh """
+                docker tag deploy:3.12-slim sarika1731/deployment:3.12-slim 
+                docker push sarika1731/deployment:3.12-slim
+                """
             }
         }
 
