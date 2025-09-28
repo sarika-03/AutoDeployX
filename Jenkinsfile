@@ -14,7 +14,16 @@ pipeline {
                 """
             }
         }
-
+       stage("docker_login") {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'PASS', usernameVariable: 'USERNAME')]) {
+                    sh '''
+                        echo "$PASS" | docker login -u "$USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+        
         stage("docker build") {
             steps {
                 sh " docker build -t deploy:3.12-slim . "
