@@ -1,7 +1,7 @@
 pipeline {
         agent any
         environment {
-        ENV = "dev"
+        DOCKERHUB_CREDENTIALS = credentials('docker_jenkins')
         }
 
     stages {  
@@ -23,10 +23,9 @@ pipeline {
 
         stage('Login to Docker Hub') {
             steps {
-                withCredentials([
-                    usernamePassword(credentialsId: 'docker_jenkins', usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PSW')
-                ]) {
-                    sh "echo \$DOCKER_PSW | docker login -u \$DOCKER_USR --password-stdin"
+                {
+                    sh "echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin"
+
                 }
             }
         }
@@ -47,15 +46,7 @@ pipeline {
 
         stage("Push Image to Docker Hub") {
             steps {
-                withCredentials([
-                    usernamePassword(credentialsId: 'docker_jenkins', usernameVariable: 'DOCKER_USR', passwordVariable: 'DOCKER_PSW')
-                ]) {
-                    sh """
-                    # Tag the image with the Docker Hub username and push
-                    docker tag deploy:3.12-slim \$DOCKER_USR/deployment:3.12-slim
-                    docker push \$DOCKER_USR/deployment:3.12-slim
-                    """
-                }
+                sh " docker tag deploy:3.12-slim sarika1731/deployment:3.12-slim "
             }
         }
 
