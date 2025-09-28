@@ -34,6 +34,11 @@ pipeline {
                 }
             }
         }
+        stage("push image to docker hub") {
+            steps {
+                sh " docker tage deployX:3.12-slim sarika/deployment"
+            }
+        }
 
         stage("deploy") {
             steps {
