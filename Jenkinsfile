@@ -1,6 +1,7 @@
 pipeline {
     agent any
     environment {
+        DOCKERHUB_CREDENTIALS = credentials('docker_jenkins')
         ENV = "dev"
     }
 
@@ -14,19 +15,20 @@ pipeline {
                 """
             }
         }
-       stage("docker_login") {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub', passwordVariable: 'PASS', usernameVariable: 'USERNAME')]) {
-                    sh '''
-                        echo "$PASS" | docker login -u "$USERNAME" --password-stdin
-                    '''
-                }
-            }
-        }
+
+
         
         stage("docker build") {
             steps {
                 sh " docker build -t deploy:3.12-slim . "
+            }
+        }
+
+
+         stage('Login to Docker') {
+            steps {
+                sh " echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin "
+                }
             }
         }
 
