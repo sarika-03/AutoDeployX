@@ -6,7 +6,6 @@ pipeline {
         DOCKER_HUB_REPO_BACKEND = 'autodeploy-backend'
         DOCKER_HUB_REPO_FRONTEND = 'autodeploy-frontend'
         DOCKER_IMAGE_TAG = "latest"
-        // KUBECONFIG will be provided at runtime from Jenkins credentials (see 'kubeconfig-credentials')
         NAMESPACE = 'autodeploy'
         EMAIL_RECIPIENT = 'sarikasharma9711@gmail.com'
     }
@@ -82,21 +81,27 @@ pipeline {
             steps {
                 echo '========== Updating Kubernetes Deployments =========='
                 script {
-                    // Use kubeconfig stored in Jenkins as a "Secret file" credential (id: kubeconfig-credentials)
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
                             export KUBECONFIG=${KUBECONFIG}
-                            # Update backend deployment image
+                            
+                            echo "📋 Checking cluster connection..."
+                            kubectl cluster-info || { echo "❌ Cannot connect to cluster"; exit 1; }
+                            
+                            echo "🔍 Checking if namespace exists..."
+                            kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
+                            
+                            echo "🔄 Updating backend deployment..."
                             kubectl set image deployment/backend \
                                 backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
-                                -n ${NAMESPACE} || true
+                                -n ${NAMESPACE}
 
-                            # Update frontend deployment image
+                            echo "🔄 Updating frontend deployment..."
                             kubectl set image deployment/frontend \
                                 frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
-                                -n ${NAMESPACE} || true
+                                -n ${NAMESPACE}
 
-                            echo "✅ K8s deployments updated"
+                            echo "✅ K8s deployments updated successfully"
                         '''
                     }
                 }
@@ -110,9 +115,14 @@ pipeline {
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
                             export KUBECONFIG=${KUBECONFIG}
+                            
+                            echo "⏳ Waiting for backend rollout..."
                             kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m
+                            
+                            echo "⏳ Waiting for frontend rollout..."
                             kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m
-                            echo "✅ Deployments are ready"
+                            
+                            echo "✅ All deployments are ready!"
                         '''
                     }
                 }
@@ -126,27 +136,25 @@ pipeline {
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
                             export KUBECONFIG=${KUBECONFIG}
+                            
                             echo "📊 Pods Status:"
                             kubectl get pods -n ${NAMESPACE}
                             
-                            echo "\n📋 Services Status:"
+                            echo ""
+                            echo "📋 Services Status:"
                             kubectl get svc -n ${NAMESPACE}
                             
-                            echo "\n🔗 App URLs:"
-                            # If using minikube, ensure minikube is available on the agent. Otherwise provide cluster ingress URLs.
+                            echo ""
+                            echo "🔗 Getting Access URLs..."
                             if command -v minikube >/dev/null 2>&1; then
                                 MINIKUBE_IP=$(minikube ip)
-                                echo "Frontend: http://${MINIKUBE_IP}:30080"
-                                echo "Prometheus: http://${MINIKUBE_IP}:30090"
-                                echo "Grafana: http://${MINIKUBE_IP}:30300"
+                                echo "✅ Frontend: http://${MINIKUBE_IP}:30080"
+                                echo "✅ Prometheus: http://${MINIKUBE_IP}:30090"
+                                echo "✅ Grafana: http://${MINIKUBE_IP}:30300"
                             else
-                                echo "Minikube not available on agent - please use cluster ingress or loadbalancer to access services."
+                                echo "ℹ️  Minikube not available - use cluster ingress/loadbalancer"
                             fi
                         '''
-                    }
-                    // If a separate minikube kubeconfig is provided as a secret file, run a quick nodes check
-                    withCredentials([file(credentialsId: 'minikube', variable: 'KUBECONFIG')]) {
-                        sh 'kubectl get nodes || true'
                     }
                 }
             }
@@ -157,10 +165,13 @@ pipeline {
                 echo '========== ✅ DEPLOYMENT SUCCESSFUL =========='
                 script {
                     sh '''
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                         echo "🚀 AutoDeployX is now running on Kubernetes"
-                        echo "Backend: Ready"
-                        echo "Frontend: Ready"
-                        echo "Monitoring: Ready"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+                        echo "✅ Backend: Ready"
+                        echo "✅ Frontend: Ready"
+                        echo "✅ Monitoring: Ready"
+                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                     '''
                 }
             }
@@ -181,7 +192,7 @@ pipeline {
                     <h2 style="color: green;">🎉 Build Successful!</h2>
                     
                     <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10">
+                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
                         <tr>
                             <td><b>Project:</b></td>
                             <td>${JOB_NAME}</td>
@@ -216,10 +227,11 @@ pipeline {
                     
                     <h3>Application URLs:</h3>
                     <ul>
-                        <li>Frontend: http://minikube-ip:30080</li>
-                        <li>Prometheus: http://minikube-ip:30090</li>
-                        <li>Grafana: http://minikube-ip:30300</li>
+                        <li><b>Frontend:</b> http://[minikube-ip]:30080</li>
+                        <li><b>Prometheus:</b> http://[minikube-ip]:30090</li>
+                        <li><b>Grafana:</b> http://[minikube-ip]:30300</li>
                     </ul>
+                    <p style="color: gray; font-size: 12px;">Replace [minikube-ip] with: <code>minikube ip</code></p>
                     
                     <h3>Jenkins Console:</h3>
                     <a href="${BUILD_URL}console">${BUILD_URL}console</a>
@@ -227,7 +239,7 @@ pipeline {
                     <hr>
                     <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
                 ''',
-                to: '${EMAIL_RECIPIENT}',
+                to: "${EMAIL_RECIPIENT}",
                 mimeType: 'text/html'
             )
         }
@@ -235,11 +247,14 @@ pipeline {
         failure {
             echo '❌ Pipeline Failed!'
             script {
-                sh '''
-                    echo "Checking pod logs..."
-                    kubectl logs -n ${NAMESPACE} -l app=backend --tail=50 || true
-                    kubectl logs -n ${NAMESPACE} -l app=frontend --tail=50 || true
-                '''
+                withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                    sh '''
+                        export KUBECONFIG=${KUBECONFIG}
+                        echo "🔍 Checking pod logs..."
+                        kubectl logs -n ${NAMESPACE} -l app=backend --tail=50 || echo "Backend logs not available"
+                        kubectl logs -n ${NAMESPACE} -l app=frontend --tail=50 || echo "Frontend logs not available"
+                    '''
+                }
             }
             emailext(
                 subject: "❌ Jenkins Build FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
@@ -247,7 +262,7 @@ pipeline {
                     <h2 style="color: red;">❌ Build Failed!</h2>
                     
                     <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10">
+                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
                         <tr>
                             <td><b>Project:</b></td>
                             <td>${JOB_NAME}</td>
@@ -270,23 +285,14 @@ pipeline {
                         </tr>
                     </table>
                     
-                    <h3>Failed Stage:</h3>
-                    <p style="color: red; background: #ffcccc; padding: 10px; border-radius: 5px;">
-                        ${BUILD_LOG, maxLines=50}
-                    </p>
-                    
-                    <h3>Troubleshooting:</h3>
-                    <ul>
-                        <li>Check Jenkins console logs</li>
-                        <li>Verify Docker Hub credentials</li>
-                        <li>Check Kubernetes cluster status</li>
-                        <li>Verify API keys are correct</li>
-                    </ul>
-                    
-                    <h3>Kubernetes Pod Logs:</h3>
-                    <pre style="background: #f0f0f0; padding: 10px; border-radius: 5px; overflow: auto;">
-                    ${LOG_EXCERPT}
-                    </pre>
+                    <h3>Troubleshooting Steps:</h3>
+                    <ol>
+                        <li>Check Jenkins console logs for detailed error</li>
+                        <li>Verify Docker Hub credentials are correct</li>
+                        <li>Check Kubernetes cluster status: <code>kubectl cluster-info</code></li>
+                        <li>Verify kubeconfig file is valid</li>
+                        <li>Check if deployments exist in namespace</li>
+                    </ol>
                     
                     <h3>Jenkins Console:</h3>
                     <a href="${BUILD_URL}console">${BUILD_URL}console</a>
@@ -294,7 +300,7 @@ pipeline {
                     <hr>
                     <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
                 ''',
-                to: '${EMAIL_RECIPIENT}',
+                to: "${EMAIL_RECIPIENT}",
                 mimeType: 'text/html',
                 attachLog: true
             )
@@ -310,7 +316,7 @@ pipeline {
                     <p>The build completed but with some warnings.</p>
                     
                     <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10">
+                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
                         <tr>
                             <td><b>Project:</b></td>
                             <td>${JOB_NAME}</td>
@@ -327,8 +333,11 @@ pipeline {
                     
                     <h3>Jenkins Console:</h3>
                     <a href="${BUILD_URL}console">${BUILD_URL}console</a>
+                    
+                    <hr>
+                    <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
                 ''',
-                to: '${EMAIL_RECIPIENT}',
+                to: "${EMAIL_RECIPIENT}",
                 mimeType: 'text/html'
             )
         }
