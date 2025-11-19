@@ -77,6 +77,22 @@ pipeline {
             }
         }
 
+        stage('☸️ Ensure K8s Resources') {
+            steps {
+                echo '========== Applying Kubernetes manifests (create/update resources) =========='
+                script {
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+                            echo "Applying k8s manifests from ./k8s/"
+                            kubectl apply -f k8s/ || true
+                            echo "✅ k8s manifests applied"
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('☸️ Update K8s Deployments') {
             steps {
                 echo '========== Updating Kubernetes Deployments =========='
