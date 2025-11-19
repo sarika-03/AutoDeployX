@@ -6,7 +6,7 @@ pipeline {
         DOCKER_HUB_REPO_BACKEND = 'autodeploy-backend'
         DOCKER_HUB_REPO_FRONTEND = 'autodeploy-frontend'
         DOCKER_IMAGE_TAG = "latest"
-        KUBECONFIG = '/home/sarika/.kube/config'
+        // KUBECONFIG will be provided at runtime from Jenkins credentials (see 'kubeconfig-credentials')
         NAMESPACE = 'autodeploy'
         EMAIL_RECIPIENT = 'sarikasharma9711@gmail.com'
     }
@@ -82,19 +82,23 @@ pipeline {
             steps {
                 echo '========== Updating Kubernetes Deployments =========='
                 script {
-                    sh '''
-                        # Update backend deployment image
-                        kubectl set image deployment/backend \
-                            backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
-                            -n ${NAMESPACE} || true
+                    // Use kubeconfig stored in Jenkins as a "Secret file" credential (id: kubeconfig-credentials)
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+                            # Update backend deployment image
+                            kubectl set image deployment/backend \
+                                backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
+                                -n ${NAMESPACE} || true
 
-                        # Update frontend deployment image
-                        kubectl set image deployment/frontend \
-                            frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
-                            -n ${NAMESPACE} || true
+                            # Update frontend deployment image
+                            kubectl set image deployment/frontend \
+                                frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
+                                -n ${NAMESPACE} || true
 
-                        echo "✅ K8s deployments updated"
-                    '''
+                            echo "✅ K8s deployments updated"
+                        '''
+                    }
                 }
             }
         }
@@ -103,11 +107,14 @@ pipeline {
             steps {
                 echo '========== Waiting for deployments to be ready =========='
                 script {
-                    sh '''
-                        kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m
-                        kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m
-                        echo "✅ Deployments are ready"
-                    '''
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+                            kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m
+                            kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m
+                            echo "✅ Deployments are ready"
+                        '''
+                    }
                 }
             }
         }
@@ -116,19 +123,27 @@ pipeline {
             steps {
                 echo '========== Verifying Kubernetes Deployment =========='
                 script {
-                    sh '''
-                        echo "📊 Pods Status:"
-                        kubectl get pods -n ${NAMESPACE}
-                        
-                        echo "\n📋 Services Status:"
-                        kubectl get svc -n ${NAMESPACE}
-                        
-                        echo "\n🔗 App URLs:"
-                        MINIKUBE_IP=$(minikube ip)
-                        echo "Frontend: http://${MINIKUBE_IP}:30080"
-                        echo "Prometheus: http://${MINIKUBE_IP}:30090"
-                        echo "Grafana: http://${MINIKUBE_IP}:30300"
-                    '''
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+                            echo "📊 Pods Status:"
+                            kubectl get pods -n ${NAMESPACE}
+                            
+                            echo "\n📋 Services Status:"
+                            kubectl get svc -n ${NAMESPACE}
+                            
+                            echo "\n🔗 App URLs:"
+                            # If using minikube, ensure minikube is available on the agent. Otherwise provide cluster ingress URLs.
+                            if command -v minikube >/dev/null 2>&1; then
+                                MINIKUBE_IP=$(minikube ip)
+                                echo "Frontend: http://${MINIKUBE_IP}:30080"
+                                echo "Prometheus: http://${MINIKUBE_IP}:30090"
+                                echo "Grafana: http://${MINIKUBE_IP}:30300"
+                            else
+                                echo "Minikube not available on agent - please use cluster ingress or loadbalancer to access services."
+                            fi
+                        '''
+                    }
                 }
             }
         }
