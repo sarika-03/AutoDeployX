@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: autodeploy
+data:
+  REACT_APP_API_URL: "http://backend:5000"
+  NODE_ENV: "production"
