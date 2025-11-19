@@ -144,6 +144,10 @@ pipeline {
                             fi
                         '''
                     }
+                    // If a separate minikube kubeconfig is provided as a secret file, run a quick nodes check
+                    withCredentials([file(credentialsId: 'minikube', variable: 'KUBECONFIG')]) {
+                        sh 'kubectl get nodes || true'
+                    }
                 }
             }
         }
