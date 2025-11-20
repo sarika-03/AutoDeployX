@@ -56,6 +56,12 @@ variable "cluster_name" {
   default     = "autodeploy-eks-cluster"
 }
 
+variable "ecr_suffix" {
+  description = "Optional suffix to append to ECR repository names to avoid name collisions (leave empty for none)"
+  type        = string
+  default     = ""
+}
+
 ######################
 #  GET AZs
 ######################
@@ -67,7 +73,7 @@ data "aws_availability_zones" "available" {
 #  ECR REPOSITORIES
 ######################
 resource "aws_ecr_repository" "backend" {
-  name                 = "autodeploy-backend"
+  name                 = "autodeploy-backend-${var.environment}${var.ecr_suffix != "" ? "-${var.ecr_suffix}" : ""}"
   image_tag_mutability = "MUTABLE"
   
   image_scanning_configuration {
@@ -80,7 +86,7 @@ resource "aws_ecr_repository" "backend" {
 }
 
 resource "aws_ecr_repository" "frontend" {
-  name                 = "autodeploy-frontend"
+  name                 = "autodeploy-frontend-${var.environment}${var.ecr_suffix != "" ? "-${var.ecr_suffix}" : ""}"
   image_tag_mutability = "MUTABLE"
   
   image_scanning_configuration {
@@ -128,112 +134,112 @@ module "vpc" {
 }
 
 ######################
-#  EKS CLUSTER
+#  EKS CLUSTER
 ######################
 
 module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "20.8.4"
-  
-  cluster_name    = var.cluster_name
-  cluster_version = "1.30"
-  
-  vpc_id                   = module.vpc.vpc_id
-  subnet_ids               = module.vpc.private_subnets
-  control_plane_subnet_ids = module.vpc.public_subnets
-  
-  # Cluster endpoint access
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
-  
-  # Enable IRSA (IAM Roles for Service Accounts)
-  enable_irsa = true
-  
-  # Cluster addons
-  cluster_addons = {
-    coredns = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
-    aws-ebs-csi-driver = {
-      most_recent = true
-    }
-  }
-  
-  # EKS Managed Node Groups
-  eks_managed_node_groups = {
-    general = {
-      name           = "general-node-group"
-      
-      # 🟢 UPDATED: Changed instance type to t2.micro for Free Tier eligibility
-      instance_types = ["t2.micro"]
-      
-      min_size     = 1
-      max_size     = 3
-      desired_size = 2
-      
-      disk_size = 20
-      
-      labels = {
-        role = "general"
-      }
-      
-      tags = {
-        Name = "AutoDeployX General Nodes"
-      }
-    }
-  }
-  
-  # Cluster security group additional rules
-  cluster_security_group_additional_rules = {
-    ingress_nodes_ephemeral_ports_tcp = {
-      description                = "Nodes on ephemeral ports"
-      protocol                   = "tcp"
-      from_port                  = 1025
-      to_port                    = 65535
-      type                       = "ingress"
-      source_node_security_group = true
-    }
-  }
-  
-  # Node security group additional rules
-  node_security_group_additional_rules = {
-    ingress_self_all = {
-      description = "Node to node all ports/protocols"
-      protocol    = "-1"
-      from_port   = 0
-      to_port     = 0
-      type        = "ingress"
-      self        = true
-    }
-    
-    ingress_cluster_all = {
-      description                   = "Cluster to node all ports/protocols"
-      protocol                      = "-1"
-      from_port                     = 0
-      to_port                       = 0
-      type                          = "ingress"
-      source_cluster_security_group = true
-    }
-    
-    egress_all = {
-      description = "Node all egress"
-      protocol    = "-1"
-      from_port   = 0
-      to_port     = 0
-      type        = "egress"
-      cidr_blocks = ["0.0.0.0/0"]
-    }
-  }
-  
-  tags = {
-    Name = "AutoDeployX EKS Cluster"
-  }
+  source  = "terraform-aws-modules/eks/aws"
+  version = "20.8.4"
+  
+  cluster_name    = var.cluster_name
+  cluster_version = "1.30"
+  
+  vpc_id                   = module.vpc.vpc_id
+  subnet_ids               = module.vpc.private_subnets
+  control_plane_subnet_ids = module.vpc.public_subnets
+  
+  # Cluster endpoint access
+  cluster_endpoint_public_access  = true
+  cluster_endpoint_private_access = true
+  
+  # Enable IRSA (IAM Roles for Service Accounts)
+  enable_irsa = true
+  
+  # Cluster addons
+  cluster_addons = {
+    coredns = {
+      most_recent = true
+    }
+    kube-proxy = {
+      most_recent = true
+    }
+    vpc-cni = {
+      most_recent = true
+    }
+    aws-ebs-csi-driver = {
+      most_recent = true
+    }
+  }
+  
+  # EKS Managed Node Groups
+  eks_managed_node_groups = {
+    general = {
+      name           = "general-node-group"
+      
+      # 🟢 UPDATED: Changed instance type to t2.micro for Free Tier eligibility
+      instance_types = ["t2.micro"]
+      
+      min_size     = 1
+      max_size     = 3
+      desired_size = 2
+      
+      disk_size = 20
+      
+      labels = {
+        role = "general"
+      }
+      
+      tags = {
+        Name = "AutoDeployX General Nodes"
+      }
+    }
+  }
+  
+  # Cluster security group additional rules
+  cluster_security_group_additional_rules = {
+    ingress_nodes_ephemeral_ports_tcp = {
+      description                = "Nodes on ephemeral ports"
+      protocol                   = "tcp"
+      from_port                  = 1025
+      to_port                    = 65535
+      type                       = "ingress"
+      source_node_security_group = true
+    }
+  }
+  
+  # Node security group additional rules
+  node_security_group_additional_rules = {
+    ingress_self_all = {
+      description = "Node to node all ports/protocols"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "ingress"
+      self        = true
+    }
+    
+    ingress_cluster_all = {
+      description                   = "Cluster to node all ports/protocols"
+      protocol                      = "-1"
+      from_port                     = 0
+      to_port                       = 0
+      type                          = "ingress"
+      source_cluster_security_group = true
+    }
+    
+    egress_all = {
+      description = "Node all egress"
+      protocol    = "-1"
+      from_port   = 0
+      to_port     = 0
+      type        = "egress"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+  }
+  
+  tags = {
+    Name = "AutoDeployX EKS Cluster"
+  }
 }
       
 ######################
