@@ -79,7 +79,7 @@ pipeline {
 
         stage('☸️ Deploy to Kubernetes') {
             steps {
-                echo '========== Deploying Fresh to Kubernetes =========='
+                echo '========== Deploying to Kubernetes =========='
                 script {
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
@@ -91,8 +91,24 @@ pipeline {
                             echo "🔍 Creating namespace if not exists..."
                             kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
                             
-                            echo "📦 Applying all Kubernetes manifests..."
-                            kubectl apply -f k8s/ -n ${NAMESPACE} --recursive
+                            echo "🔍 Creating monitoring namespace if not exists..."
+                            kubectl get namespace monitoring || kubectl create namespace monitoring
+                            
+                            echo "📦 Applying main app manifests..."
+                            # Apply only app-specific manifests to autodeploy namespace
+                            kubectl apply -f k8s/namespace.yaml || true
+                            kubectl apply -f k8s/backend-deployment.yaml -n ${NAMESPACE} || true
+                            kubectl apply -f k8s/backend-service.yaml -n ${NAMESPACE} || true
+                            kubectl apply -f k8s/frontend-deployment.yaml -n ${NAMESPACE} || true
+                            kubectl apply -f k8s/frontend-service.yaml -n ${NAMESPACE} || true
+                            kubectl apply -f k8s/configmap.yaml -n ${NAMESPACE} || true
+                            kubectl apply -f k8s/ingress.yaml -n ${NAMESPACE} || true
+                            
+                            echo "📦 Applying monitoring manifests..."
+                            # Apply monitoring resources to monitoring namespace
+                            if [ -d "k8s/monitoring" ]; then
+                                kubectl apply -f k8s/monitoring/ -n monitoring || echo "⚠️ Monitoring setup skipped"
+                            fi
                             
                             echo "⏳ Waiting 10 seconds for resources to stabilize..."
                             sleep 10
@@ -166,70 +182,22 @@ pipeline {
 
         success {
             echo '✅ Pipeline Successful!'
-            script {
-                // Simple email notification without HTML
-                try {
-                    emailext(
-                        subject: "SUCCESS: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                        body: """
-                            Build Successful!
-                            
-                            Project: ${env.JOB_NAME}
-                            Build Number: ${env.BUILD_NUMBER}
-                            Build Status: SUCCESS
-                            
-                            Deployment Summary:
-                            - Code checked out from GitHub
-                            - Backend Docker image built and pushed
-                            - Frontend Docker image built and pushed
-                            - Kubernetes deployments updated
-                            
-                            Access Your Application:
-                            Run 'minikube ip' and use that IP with:
-                            - Frontend: http://[minikube-ip]:30080
-                            - Backend: http://[minikube-ip]:30081
-                            - Prometheus: http://[minikube-ip]:30090
-                            - Grafana: http://[minikube-ip]:30300
-                            
-                            Console: ${env.BUILD_URL}console
-                        """,
-                        to: "${EMAIL_RECIPIENT}",
-                        mimeType: 'text/plain'
-                    )
-                } catch (Exception e) {
-                    echo "⚠️ Email notification failed: ${e.message}"
-                    echo "Build was still successful!"
-                }
-            }
         }
 
         failure {
             echo '❌ Pipeline Failed!'
             script {
-                try {
-                    emailext(
-                        subject: "FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                        body: """
-                            Build Failed!
-                            
-                            Project: ${env.JOB_NAME}
-                            Build Number: ${env.BUILD_NUMBER}
-                            Build Status: FAILED
-                            
-                            Check Jenkins console logs for details:
-                            ${env.BUILD_URL}console
-                            
-                            Troubleshooting:
-                            1. Verify Kubernetes cluster: minikube status
-                            2. Check namespace: kubectl get ns
-                            3. View pods: kubectl get pods -n autodeploy
-                        """,
-                        to: "${EMAIL_RECIPIENT}",
-                        mimeType: 'text/plain',
-                        attachLog: true
-                    )
-                } catch (Exception e) {
-                    echo "⚠️ Email notification failed: ${e.message}"
+                withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                    sh '''
+                        export KUBECONFIG=${KUBECONFIG}
+                        echo "🔍 Debugging - Pod Status:"
+                        kubectl get pods -n ${NAMESPACE} || true
+                        
+                        echo ""
+                        echo "🔍 Debugging - Recent Pod Logs:"
+                        kubectl logs -n ${NAMESPACE} -l app=backend --tail=20 || true
+                        kubectl logs -n ${NAMESPACE} -l app=frontend --tail=20 || true
+                    '''
                 }
             }
         }
