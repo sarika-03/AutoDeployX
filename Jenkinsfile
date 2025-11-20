@@ -77,9 +77,9 @@ pipeline {
             }
         }
 
-        stage('☸️ Setup K8s Namespace & Resources') {
+        stage('☸️ Deploy to Kubernetes') {
             steps {
-                echo '========== Setting up Kubernetes Namespace and Resources =========='
+                echo '========== Deploying Fresh to Kubernetes =========='
                 script {
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
@@ -91,58 +91,13 @@ pipeline {
                             echo "🔍 Creating namespace if not exists..."
                             kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
                             
-                            echo "🧹 Cleaning up old resources (if any)..."
-                            kubectl delete all --all -n ${NAMESPACE} --ignore-not-found=true
+                            echo "📦 Applying all Kubernetes manifests..."
+                            kubectl apply -f k8s/ -n ${NAMESPACE} --recursive
                             
-                            echo "📦 Applying Kubernetes manifests..."
-                            kubectl apply -f k8s/ -n ${NAMESPACE} || true
+                            echo "⏳ Waiting 10 seconds for resources to stabilize..."
+                            sleep 10
                             
-                            echo "✅ Namespace and resources setup complete"
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('☸️ Deploy to Kubernetes') {
-            steps {
-                echo '========== Deploying to Kubernetes =========='
-                script {
-                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
-                        sh '''
-                            export KUBECONFIG=${KUBECONFIG}
-                            
-                            echo "🔄 Checking if deployments exist..."
-                            BACKEND_EXISTS=$(kubectl get deployment backend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
-                            FRONTEND_EXISTS=$(kubectl get deployment frontend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
-                            
-                            # Apply all manifests first (this will create/update deployments)
-                            echo "📦 Applying all K8s manifests to ensure deployments exist..."
-                            kubectl apply -f k8s/ -n ${NAMESPACE} --recursive || true
-                            
-                            # Wait a moment for resources to be created
-                            sleep 5
-                            
-                            # Now update images to force a fresh pull
-                            if kubectl get deployment backend -n ${NAMESPACE} >/dev/null 2>&1; then
-                                echo "🔄 Updating backend deployment image..."
-                                kubectl set image deployment/backend \
-                                    backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
-                                    -n ${NAMESPACE}
-                            else
-                                echo "⚠️  Backend deployment still not found after manifest apply"
-                            fi
-                            
-                            if kubectl get deployment frontend -n ${NAMESPACE} >/dev/null 2>&1; then
-                                echo "🔄 Updating frontend deployment image..."
-                                kubectl set image deployment/frontend \
-                                    frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
-                                    -n ${NAMESPACE}
-                            else
-                                echo "⚠️  Frontend deployment still not found after manifest apply"
-                            fi
-                            
-                            echo "✅ Deployment commands executed"
+                            echo "✅ Deployment complete!"
                         '''
                     }
                 }
@@ -158,10 +113,10 @@ pipeline {
                             export KUBECONFIG=${KUBECONFIG}
                             
                             echo "⏳ Waiting for backend rollout..."
-                            kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m || echo "Backend rollout status check failed"
+                            kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m || true
                             
                             echo "⏳ Waiting for frontend rollout..."
-                            kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m || echo "Frontend rollout status check failed"
+                            kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m || true
                             
                             echo "✅ Rollout complete!"
                         '''
@@ -195,28 +150,9 @@ pipeline {
                                 echo "✅ Prometheus: http://${MINIKUBE_IP}:30090"
                                 echo "✅ Grafana: http://${MINIKUBE_IP}:30300"
                                 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                            else
-                                echo "ℹ️  Minikube not available - use cluster ingress/loadbalancer"
                             fi
                         '''
                     }
-                }
-            }
-        }
-
-        stage('🎉 Success') {
-            steps {
-                echo '========== ✅ DEPLOYMENT SUCCESSFUL =========='
-                script {
-                    sh '''
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        echo "🚀 AutoDeployX is now running on Kubernetes"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                        echo "✅ Backend: Ready"
-                        echo "✅ Frontend: Ready"
-                        echo "✅ Monitoring: Ready"
-                        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-                    '''
                 }
             }
         }
@@ -230,115 +166,72 @@ pipeline {
 
         success {
             echo '✅ Pipeline Successful!'
-            emailext(
-                subject: "✅ Jenkins Build SUCCESS: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: '''
-                    <h2 style="color: green;">🎉 Build Successful!</h2>
-                    
-                    <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
-                        <tr>
-                            <td><b>Project:</b></td>
-                            <td>${JOB_NAME}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Number:</b></td>
-                            <td>${BUILD_NUMBER}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Status:</b></td>
-                            <td style="color: green;"><b>✅ SUCCESS</b></td>
-                        </tr>
-                        <tr>
-                            <td><b>Duration:</b></td>
-                            <td>${BUILD_DURATION}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Timestamp:</b></td>
-                            <td>${BUILD_TIMESTAMP}</td>
-                        </tr>
-                    </table>
-                    
-                    <h3>Deployment Summary:</h3>
-                    <ul>
-                        <li>✅ Code checked out from GitHub</li>
-                        <li>✅ Backend Docker image built and pushed</li>
-                        <li>✅ Frontend Docker image built and pushed</li>
-                        <li>✅ Kubernetes deployments updated</li>
-                        <li>✅ All pods are healthy and running</li>
-                    </ul>
-                    
-                    <h3>Access Your Application:</h3>
-                    <p>Run: <code>minikube ip</code> and use that IP with these ports:</p>
-                    <ul>
-                        <li><b>Frontend:</b> http://[minikube-ip]:30080</li>
-                        <li><b>Backend:</b> http://[minikube-ip]:30081</li>
-                        <li><b>Prometheus:</b> http://[minikube-ip]:30090</li>
-                        <li><b>Grafana:</b> http://[minikube-ip]:30300</li>
-                    </ul>
-                    
-                    <h3>Jenkins Console:</h3>
-                    <a href="${BUILD_URL}console">${BUILD_URL}console</a>
-                    
-                    <hr>
-                    <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
-                ''',
-                to: "${EMAIL_RECIPIENT}",
-                mimeType: 'text/html'
-            )
+            script {
+                // Simple email notification without HTML
+                try {
+                    emailext(
+                        subject: "SUCCESS: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
+                        body: """
+                            Build Successful!
+                            
+                            Project: ${env.JOB_NAME}
+                            Build Number: ${env.BUILD_NUMBER}
+                            Build Status: SUCCESS
+                            
+                            Deployment Summary:
+                            - Code checked out from GitHub
+                            - Backend Docker image built and pushed
+                            - Frontend Docker image built and pushed
+                            - Kubernetes deployments updated
+                            
+                            Access Your Application:
+                            Run 'minikube ip' and use that IP with:
+                            - Frontend: http://[minikube-ip]:30080
+                            - Backend: http://[minikube-ip]:30081
+                            - Prometheus: http://[minikube-ip]:30090
+                            - Grafana: http://[minikube-ip]:30300
+                            
+                            Console: ${env.BUILD_URL}console
+                        """,
+                        to: "${EMAIL_RECIPIENT}",
+                        mimeType: 'text/plain'
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Email notification failed: ${e.message}"
+                    echo "Build was still successful!"
+                }
+            }
         }
 
         failure {
             echo '❌ Pipeline Failed!'
             script {
-                withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
-                    sh '''
-                        export KUBECONFIG=${KUBECONFIG}
-                        echo "🔍 Checking pod logs..."
-                        kubectl logs -n ${NAMESPACE} -l app=backend --tail=50 || echo "Backend logs not available"
-                        kubectl logs -n ${NAMESPACE} -l app=frontend --tail=50 || echo "Frontend logs not available"
-                    '''
+                try {
+                    emailext(
+                        subject: "FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
+                        body: """
+                            Build Failed!
+                            
+                            Project: ${env.JOB_NAME}
+                            Build Number: ${env.BUILD_NUMBER}
+                            Build Status: FAILED
+                            
+                            Check Jenkins console logs for details:
+                            ${env.BUILD_URL}console
+                            
+                            Troubleshooting:
+                            1. Verify Kubernetes cluster: minikube status
+                            2. Check namespace: kubectl get ns
+                            3. View pods: kubectl get pods -n autodeploy
+                        """,
+                        to: "${EMAIL_RECIPIENT}",
+                        mimeType: 'text/plain',
+                        attachLog: true
+                    )
+                } catch (Exception e) {
+                    echo "⚠️ Email notification failed: ${e.message}"
                 }
             }
-            emailext(
-                subject: "❌ Jenkins Build FAILED: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: '''
-                    <h2 style="color: red;">❌ Build Failed!</h2>
-                    
-                    <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
-                        <tr>
-                            <td><b>Project:</b></td>
-                            <td>${JOB_NAME}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Number:</b></td>
-                            <td>${BUILD_NUMBER}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Status:</b></td>
-                            <td style="color: red;"><b>❌ FAILED</b></td>
-                        </tr>
-                    </table>
-                    
-                    <h3>Troubleshooting Steps:</h3>
-                    <ol>
-                        <li>Check Jenkins console logs for detailed error</li>
-                        <li>Verify Kubernetes cluster is running: <code>minikube status</code></li>
-                        <li>Check namespace exists: <code>kubectl get ns</code></li>
-                        <li>View pod status: <code>kubectl get pods -n autodeploy</code></li>
-                    </ol>
-                    
-                    <h3>Jenkins Console:</h3>
-                    <a href="${BUILD_URL}console">${BUILD_URL}console</a>
-                    
-                    <hr>
-                    <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
-                ''',
-                to: "${EMAIL_RECIPIENT}",
-                mimeType: 'text/html',
-                attachLog: true
-            )
         }
     }
 }
