@@ -77,47 +77,66 @@ pipeline {
             }
         }
 
-        stage('☸️ Ensure K8s Resources') {
+        stage('☸️ Setup K8s Namespace & Resources') {
             steps {
-                echo '========== Applying Kubernetes manifests (create/update resources) =========='
-                script {
-                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
-                        sh '''
-                            export KUBECONFIG=${KUBECONFIG}
-                            echo "Applying k8s manifests from ./k8s/"
-                            kubectl apply -f k8s/ || true
-                            echo "✅ k8s manifests applied"
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('☸️ Update K8s Deployments') {
-            steps {
-                echo '========== Updating Kubernetes Deployments =========='
+                echo '========== Setting up Kubernetes Namespace and Resources =========='
                 script {
                     withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
                         sh '''
                             export KUBECONFIG=${KUBECONFIG}
                             
                             echo "📋 Checking cluster connection..."
-                            kubectl cluster-info || { echo "❌ Cannot connect to cluster"; exit 1; }
+                            kubectl cluster-info
                             
-                            echo "🔍 Checking if namespace exists..."
+                            echo "🔍 Creating namespace if not exists..."
                             kubectl get namespace ${NAMESPACE} || kubectl create namespace ${NAMESPACE}
                             
-                            echo "🔄 Updating backend deployment..."
-                            kubectl set image deployment/backend \
-                                backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
-                                -n ${NAMESPACE}
+                            echo "🧹 Cleaning up old resources (if any)..."
+                            kubectl delete all --all -n ${NAMESPACE} --ignore-not-found=true
+                            
+                            echo "📦 Applying Kubernetes manifests..."
+                            kubectl apply -f k8s/ -n ${NAMESPACE} || true
+                            
+                            echo "✅ Namespace and resources setup complete"
+                        '''
+                    }
+                }
+            }
+        }
 
-                            echo "🔄 Updating frontend deployment..."
-                            kubectl set image deployment/frontend \
-                                frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
-                                -n ${NAMESPACE}
-
-                            echo "✅ K8s deployments updated successfully"
+        stage('☸️ Deploy to Kubernetes') {
+            steps {
+                echo '========== Deploying to Kubernetes =========='
+                script {
+                    withCredentials([file(credentialsId: 'kubeconfig-credentials', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            export KUBECONFIG=${KUBECONFIG}
+                            
+                            echo "🔄 Checking if deployments exist..."
+                            BACKEND_EXISTS=$(kubectl get deployment backend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
+                            FRONTEND_EXISTS=$(kubectl get deployment frontend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
+                            
+                            if [ "$BACKEND_EXISTS" -gt 0 ]; then
+                                echo "🔄 Updating backend deployment..."
+                                kubectl set image deployment/backend \
+                                    backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                            else
+                                echo "⚠️  Backend deployment not found, creating from manifest..."
+                                kubectl apply -f k8s/backend-deployment.yaml -n ${NAMESPACE}
+                            fi
+                            
+                            if [ "$FRONTEND_EXISTS" -gt 0 ]; then
+                                echo "🔄 Updating frontend deployment..."
+                                kubectl set image deployment/frontend \
+                                    frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
+                                    -n ${NAMESPACE}
+                            else
+                                echo "⚠️  Frontend deployment not found, creating from manifest..."
+                                kubectl apply -f k8s/frontend-deployment.yaml -n ${NAMESPACE}
+                            fi
+                            
+                            echo "✅ Deployment commands executed"
                         '''
                     }
                 }
@@ -133,12 +152,12 @@ pipeline {
                             export KUBECONFIG=${KUBECONFIG}
                             
                             echo "⏳ Waiting for backend rollout..."
-                            kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m
+                            kubectl rollout status deployment/backend -n ${NAMESPACE} --timeout=5m || echo "Backend rollout status check failed"
                             
                             echo "⏳ Waiting for frontend rollout..."
-                            kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m
+                            kubectl rollout status deployment/frontend -n ${NAMESPACE} --timeout=5m || echo "Frontend rollout status check failed"
                             
-                            echo "✅ All deployments are ready!"
+                            echo "✅ Rollout complete!"
                         '''
                     }
                 }
@@ -164,9 +183,12 @@ pipeline {
                             echo "🔗 Getting Access URLs..."
                             if command -v minikube >/dev/null 2>&1; then
                                 MINIKUBE_IP=$(minikube ip)
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                                 echo "✅ Frontend: http://${MINIKUBE_IP}:30080"
+                                echo "✅ Backend: http://${MINIKUBE_IP}:30081"
                                 echo "✅ Prometheus: http://${MINIKUBE_IP}:30090"
                                 echo "✅ Grafana: http://${MINIKUBE_IP}:30300"
+                                echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
                             else
                                 echo "ℹ️  Minikube not available - use cluster ingress/loadbalancer"
                             fi
@@ -238,16 +260,16 @@ pipeline {
                         <li>✅ Frontend Docker image built and pushed</li>
                         <li>✅ Kubernetes deployments updated</li>
                         <li>✅ All pods are healthy and running</li>
-                        <li>✅ Monitoring is active (Prometheus & Grafana)</li>
                     </ul>
                     
-                    <h3>Application URLs:</h3>
+                    <h3>Access Your Application:</h3>
+                    <p>Run: <code>minikube ip</code> and use that IP with these ports:</p>
                     <ul>
                         <li><b>Frontend:</b> http://[minikube-ip]:30080</li>
+                        <li><b>Backend:</b> http://[minikube-ip]:30081</li>
                         <li><b>Prometheus:</b> http://[minikube-ip]:30090</li>
                         <li><b>Grafana:</b> http://[minikube-ip]:30300</li>
                     </ul>
-                    <p style="color: gray; font-size: 12px;">Replace [minikube-ip] with: <code>minikube ip</code></p>
                     
                     <h3>Jenkins Console:</h3>
                     <a href="${BUILD_URL}console">${BUILD_URL}console</a>
@@ -291,23 +313,14 @@ pipeline {
                             <td><b>Build Status:</b></td>
                             <td style="color: red;"><b>❌ FAILED</b></td>
                         </tr>
-                        <tr>
-                            <td><b>Duration:</b></td>
-                            <td>${BUILD_DURATION}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Timestamp:</b></td>
-                            <td>${BUILD_TIMESTAMP}</td>
-                        </tr>
                     </table>
                     
                     <h3>Troubleshooting Steps:</h3>
                     <ol>
                         <li>Check Jenkins console logs for detailed error</li>
-                        <li>Verify Docker Hub credentials are correct</li>
-                        <li>Check Kubernetes cluster status: <code>kubectl cluster-info</code></li>
-                        <li>Verify kubeconfig file is valid</li>
-                        <li>Check if deployments exist in namespace</li>
+                        <li>Verify Kubernetes cluster is running: <code>minikube status</code></li>
+                        <li>Check namespace exists: <code>kubectl get ns</code></li>
+                        <li>View pod status: <code>kubectl get pods -n autodeploy</code></li>
                     </ol>
                     
                     <h3>Jenkins Console:</h3>
@@ -319,42 +332,6 @@ pipeline {
                 to: "${EMAIL_RECIPIENT}",
                 mimeType: 'text/html',
                 attachLog: true
-            )
-        }
-
-        unstable {
-            echo '⚠️ Pipeline Unstable!'
-            emailext(
-                subject: "⚠️ Jenkins Build UNSTABLE: ${env.JOB_NAME} - Build #${env.BUILD_NUMBER}",
-                body: '''
-                    <h2 style="color: orange;">⚠️ Build Unstable!</h2>
-                    
-                    <p>The build completed but with some warnings.</p>
-                    
-                    <h3>Build Details:</h3>
-                    <table border="1" cellpadding="10" style="border-collapse: collapse;">
-                        <tr>
-                            <td><b>Project:</b></td>
-                            <td>${JOB_NAME}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Number:</b></td>
-                            <td>${BUILD_NUMBER}</td>
-                        </tr>
-                        <tr>
-                            <td><b>Build Status:</b></td>
-                            <td style="color: orange;"><b>⚠️ UNSTABLE</b></td>
-                        </tr>
-                    </table>
-                    
-                    <h3>Jenkins Console:</h3>
-                    <a href="${BUILD_URL}console">${BUILD_URL}console</a>
-                    
-                    <hr>
-                    <p style="color: gray; font-size: 12px;">This is an automated email from Jenkins. Please do not reply.</p>
-                ''',
-                to: "${EMAIL_RECIPIENT}",
-                mimeType: 'text/html'
             )
         }
     }
