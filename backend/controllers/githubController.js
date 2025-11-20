@@ -175,3 +175,16 @@ const analyzeRepository = async (req, res) => {
 module.exports = {
   analyzeRepository
 };
+
+// For compatibility: provide a HuggingFace endpoint that currently
+// falls back to the same analysis pipeline (Gemini) until a
+// HuggingFace implementation is added.
+const analyzeWithHuggingFace = async (req, res) => {
+  console.warn('analyzeWithHuggingFace: falling back to analyzeRepository (Gemini)');
+  return analyzeRepository(req, res);
+};
+
+module.exports = {
+  analyzeRepository,
+  analyzeWithHuggingFace
+};
