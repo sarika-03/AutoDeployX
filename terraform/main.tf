@@ -176,8 +176,8 @@ module "eks" {
     general = {
       name           = "general-node-group"
       
-      # 🟢 UPDATED: Changed instance type to t2.micro for Free Tier eligibility
-      instance_types = ["t2.micro"]
+      # 🟢 UPDATED: Changed instance type to t2.small (t2.micro not Free Tier eligible in ap-south-1)
+      instance_types = ["t2.small"]
       
       min_size     = 1
       max_size     = 3
