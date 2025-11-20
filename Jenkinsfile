@@ -116,24 +116,30 @@ pipeline {
                             BACKEND_EXISTS=$(kubectl get deployment backend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
                             FRONTEND_EXISTS=$(kubectl get deployment frontend -n ${NAMESPACE} --ignore-not-found=true | wc -l)
                             
-                            if [ "$BACKEND_EXISTS" -gt 0 ]; then
-                                echo "🔄 Updating backend deployment..."
+                            # Apply all manifests first (this will create/update deployments)
+                            echo "📦 Applying all K8s manifests to ensure deployments exist..."
+                            kubectl apply -f k8s/ -n ${NAMESPACE} --recursive || true
+                            
+                            # Wait a moment for resources to be created
+                            sleep 5
+                            
+                            # Now update images to force a fresh pull
+                            if kubectl get deployment backend -n ${NAMESPACE} >/dev/null 2>&1; then
+                                echo "🔄 Updating backend deployment image..."
                                 kubectl set image deployment/backend \
                                     backend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_BACKEND}:${DOCKER_IMAGE_TAG} \
                                     -n ${NAMESPACE}
                             else
-                                echo "⚠️  Backend deployment not found, creating from manifest..."
-                                kubectl apply -f k8s/backend-deployment.yaml -n ${NAMESPACE}
+                                echo "⚠️  Backend deployment still not found after manifest apply"
                             fi
                             
-                            if [ "$FRONTEND_EXISTS" -gt 0 ]; then
-                                echo "🔄 Updating frontend deployment..."
+                            if kubectl get deployment frontend -n ${NAMESPACE} >/dev/null 2>&1; then
+                                echo "🔄 Updating frontend deployment image..."
                                 kubectl set image deployment/frontend \
                                     frontend=${DOCKER_HUB_USERNAME}/${DOCKER_HUB_REPO_FRONTEND}:${DOCKER_IMAGE_TAG} \
                                     -n ${NAMESPACE}
                             else
-                                echo "⚠️  Frontend deployment not found, creating from manifest..."
-                                kubectl apply -f k8s/frontend-deployment.yaml -n ${NAMESPACE}
+                                echo "⚠️  Frontend deployment still not found after manifest apply"
                             fi
                             
                             echo "✅ Deployment commands executed"
