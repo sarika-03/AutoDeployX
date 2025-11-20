@@ -46,4 +46,4 @@ venv/
 k8s/secret.yaml
 venv/
 k8s/secret.yaml
-k8s/backend-deployment.yaml
+
