@@ -1,18 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autodeployx-frontend
+  namespace: autodeployx
+  labels:
+    app: autodeployx
+    tier: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: autodeployx
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        app: autodeployx
+        tier: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/example/autodeployx-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: VITE_API_URL
+              value: https://autodeployx.example.com/api
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend-service
-  namespace: autodeploy
-  labels:
-    app: frontend
+  name: autodeployx-frontend
+  namespace: autodeployx
 spec:
-  type: NodePort
   selector:
-    app: frontend
+    app: autodeployx
+    tier: frontend
   ports:
-  - name: http
-    protocol: TCP
-    port: 80
-    targetPort: 80
-    # Remove fixed nodePort to avoid conflicts; let Kubernetes assign one automatically
-    # If you need a fixed port, set `nodePort` to a free value within the cluster's NodePort range.
+    - port: 3000
+      targetPort: http
+      name: http
+
