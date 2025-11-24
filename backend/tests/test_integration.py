@@ -30,5 +30,3 @@ def test_live_repo_analysis_smoke():
     ]:
         assert key in body
     assert isinstance(body["source_references"], list)
-
-

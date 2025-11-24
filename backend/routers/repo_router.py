@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from services.analysis_pipeline import RepositoryAnalyzer
 
@@ -38,7 +38,6 @@ class AnalyzeRequest(BaseModel):
 
         # Normalize to https if no scheme provided previously
         return url
-
 
 class SourceReferenceModel(BaseModel):
     id: str

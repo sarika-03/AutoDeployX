@@ -103,7 +103,7 @@ An enterprise-grade AIOps platform that analyzes GitHub repositories using advan
 - **Orchestration**: Kubernetes (k3s/EKS)
 - **IaC**: Terraform
 - **Monitoring**: Prometheus + Grafana
-- **CI/CD**: Jenkins (pipeline in repository root)
+- **CI/CD**: GitHub Actions
 
 ## 📦 Prerequisites
 

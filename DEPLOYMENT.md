@@ -77,30 +77,22 @@ terraform output
 
 ## CI/CD Pipeline
 
-### Jenkins
+### GitHub Actions
 
-Use the `Jenkinsfile` in the repo root with a multibranch pipeline. Each run performs:
+Workflows are triggered automatically:
+- `ci.yml` - On every push/PR
+- `cd.yml` - On push to main or tags
+- `destroy.yml` - Manual trigger only
 
-1. Checkout source.
-2. Backend tests via virtualenv + `pytest`.
-3. Frontend `npm run build`.
-4. Docker build/push for backend & frontend images (parameterized registries).
-5. `kubectl set image` + rollout verification in the `autodeployx` namespace.
+### Required Secrets
 
-### Required Jenkins Credentials
-
-Configure these in **Manage Jenkins → Credentials**:
-
+Set in GitHub Repository Settings:
 ```
-aws-creds           # AWS access key ID + secret access key
-kubeconfig          # File credential containing the target cluster kubeconfig
+AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY
+ECR_REGISTRY
+SLACK_WEBHOOK
 ```
-
-Pipeline parameters to set when creating the job:
-
-- `BACKEND_IMAGE` – e.g. `123456789012.dkr.ecr.us-east-1.amazonaws.com/autodeployx-backend`
-- `FRONTEND_IMAGE` – e.g. `123456789012.dkr.ecr.us-east-1.amazonaws.com/autodeployx-frontend`
-- `AWS_REGION` – matches the ECR/cluster region
 
 ## Monitoring
 

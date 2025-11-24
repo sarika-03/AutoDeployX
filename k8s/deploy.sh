@@ -22,5 +22,3 @@ echo ">> Current rollout status"
 kubectl rollout status deployment/autodeployx-backend -n "${NAMESPACE}"
 kubectl rollout status deployment/autodeployx-frontend -n "${NAMESPACE}"
 kubectl rollout status statefulset/qdrant -n "${NAMESPACE}"
-
-

@@ -34,5 +34,3 @@ Always destroy environments that are not in use:
 ```bash
 terraform destroy -var-file="environments/dev/terraform.tfvars"
 ```
-
-

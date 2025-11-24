@@ -1,6 +1,6 @@
 ## AutoDeployX
 
-AI-assisted repository analysis with FastAPI, Vite/React, Qdrant-powered RAG, Prometheus/Grafana monitoring, Terraform infrastructure, and a Jenkins-based CI/CD pipeline.
+AI-assisted repository analysis with FastAPI, Vite/React, Qdrant-powered RAG, Prometheus/Grafana monitoring, Terraform infrastructure, and GitHub Actions CI/CD.
 
 ```
                          +-------------------+
@@ -35,7 +35,7 @@ AI-assisted repository analysis with FastAPI, Vite/React, Qdrant-powered RAG, Pr
 - Docker Compose stack with backend, frontend, Qdrant, Prometheus, and Grafana (ports 8000/3000/6333/9090/3001).
 - Kubernetes manifests (namespace, config map, secrets template, Deployments, qdrant StatefulSet w/ PVC note, ingress, deploy script) ready for `kubectl` apply.
 - Terraform modules for VPC, IAM, EC2 (t2.micro), ECR, and S3 with billing callouts in `terraform/README.md`.
-- Jenkins pipeline (see `Jenkinsfile`) that tests, builds Docker images, pushes to ECR, and deploys to Kubernetes.
+- GitHub Actions workflow building/pushing Docker images to ECR and rolling deployments via kubectl.
 
 ---
 
@@ -52,7 +52,7 @@ Copy `.env.example` to `.env` and fill in secrets:
 | `PROMETHEUS_METRICS_PATH` | Typically `/metrics` |
 | `REACT_APP_API_URL` / `VITE_API_URL` | Frontend API base (Compose & k8s set automatically) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` | Required for Terraform + CI push |
-| `ECR_REGISTRY`, `ECR_BACKEND_REPO`, `ECR_FRONTEND_REPO`, `PUBLIC_API_URL` | Used by Jenkins pipeline for image tags and frontend configuration |
+| `ECR_REGISTRY`, `ECR_BACKEND_REPO`, `ECR_FRONTEND_REPO`, `PUBLIC_API_URL`, `KUBE_CONFIG` (base64) | GitHub Actions secrets |
 
 Never commit `.env`. Use `LOCAL_LLM_PATH` for llama.cpp, or set hosted keys for OpenAI/HuggingFace.
 
@@ -146,27 +146,20 @@ See `terraform/README.md` for billing notes (Elastic IP, ECR storage, S3 usage).
 
 ---
 
-## CI/CD (Jenkins)
+## CI/CD
 
-`Jenkinsfile` defines the end-to-end pipeline:
+`.github/workflows/ci.yml` runs on pushes/PRs:
 
-1. **Checkout** source.
-2. **Backend tests** – creates an isolated venv, installs `backend/requirements.txt`, runs `pytest`.
-3. **Frontend build** – installs npm packages and builds the Vite app.
-4. **Docker build & push** – builds backend/frontend images using `docker/backend.Dockerfile` and `docker/frontend.Dockerfile`, then pushes to the configured ECR (or any registry) using AWS credentials.
-5. **Kubernetes deploy** – runs `kubectl set image` + `kubectl rollout status` against the `autodeployx` namespace.
+1. Python + Node tests (`pytest`, `npm run build`)
+2. Docker build & push to ECR (`ECR_REGISTRY`, `ECR_BACKEND_REPO`, `ECR_FRONTEND_REPO`)
+3. `kubectl set image` rollout using `KUBE_CONFIG` secret (base64 kubeconfig)
 
-### Jenkins prerequisites
+Set secrets in repository settings:
 
-- Global tools: Python 3.11+, Node.js 20+, Docker CLI, kubectl, AWS CLI.
-- Credentials:
-  - `aws-creds` (AWS access key ID + secret key) used by the `withAWS` block.
-  - `kubeconfig` (file credential) containing the kubeconfig for the target cluster.
-- Pipeline parameters:
-  - `BACKEND_IMAGE` / `FRONTEND_IMAGE`: fully qualified image repos (e.g., `123456789012.dkr.ecr.us-east-1.amazonaws.com/autodeployx-backend`).
-  - `AWS_REGION`: defaults to `us-east-1`.
-
-Create a multibranch pipeline job pointing at this repo; Jenkins will execute the stages on every change. Build logs act as the DevOps “dashboard,” or expose Jenkins metrics to Prometheus for Grafana visualization.
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+- `ECR_REGISTRY`, `ECR_BACKEND_REPO`, `ECR_FRONTEND_REPO`
+- `PUBLIC_API_URL`
+- `KUBE_CONFIG` (base64 encoded kubeconfig)
 
 ---
 
@@ -200,7 +193,5 @@ Temperature defaults to `0.0`, and output schema enforces JSON structure with `r
 - [x] Kubernetes manifests include namespace, configmap, secrets template, Deployments, qdrant StatefulSet + PVC guidance, ingress, deploy script.
 - [x] Terraform provisions VPC, IAM, EC2 (t2.micro), ECR, S3 with documented billing risks.
 - [x] Prometheus scrapes backend metrics; Grafana dashboard + datasources provisioned.
-- [x] Jenkins pipeline builds, tests, pushes images, and deploys to Kubernetes.
 - [x] Tests include FastAPI unit tests + optional integration smoke test against a public repo.
-
-
+- [x] GitHub Actions workflow builds/pushes images and deploys to Kubernetes.
