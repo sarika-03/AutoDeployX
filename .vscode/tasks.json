@@ -1,0 +1,12 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run project with Makefile or Docker Compose",
+			"type": "shell",
+			"command": "if [ -f Makefile ]; then make up || make start || make run; elif [ -f docker-compose.yml ]; then docker-compose up --build; elif [ -f docker-compose.dev.yml ]; then docker-compose -f docker-compose.dev.yml up --build; else echo 'No recognized entry point (Makefile or docker-compose) found.'; fi",
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}
